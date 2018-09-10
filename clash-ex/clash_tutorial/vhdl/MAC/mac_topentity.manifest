@@ -1,0 +1,2 @@
+Manifest {manifestHash = (-729856776580873627,Just 2283526722125609309), portInNames = ["clk","rst","\\#arg_0\\","\\#arg_1\\"], portInTypes = ["std_logic","std_logic","signed(8 downto 0)","signed(8 downto 0)"], portOutNames = ["acc"], portOutTypes = ["signed(8 downto 0)"], componentNames = ["mac_topentity"]}
+
