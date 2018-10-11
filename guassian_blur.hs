@@ -1,5 +1,6 @@
 module GAUSSIAN where
 import Clash.Prelude
+import qualified Foreign                  as F
 import Control.Monad (mapM_,foldM)
 
 --convolute ::    Image 
@@ -17,20 +18,45 @@ import Control.Monad (mapM_,foldM)
 
 type RGBA = (Bit,Bit,Bit,Bit)
 
-newtype Image = Image (ForeignPtr (Ptr GDImage))
+--newtype Image = Image (ForeignPtr (Ptr GDImage))
 
-type Size = (Int,Int)
+-- replace Signed 8s with unsigned 8 or whatever it needs to be
+-- 
 
-type Point = (Int,Int)
 
-type Color = CInt
+type Size = (Signed 8,Signed 8)
 
-setPixel :: Point -> Color -> Image -> IO ()
+type Point = (Bit,Bit)
+
+type Color = Signed 8
+
+rgba :: Signed 8 -- ^ Red (0-255)
+          -> Signed 8 -- ^ Green (0-255)
+          -> Signed 8 -- ^ Blue (0-255)
+          -> Signed 8 -- ^ Alpha (0-127), 0 is opaque, 127 is transparent
+          -> Color
+rgba r g b a = 
+    (int a `F.shiftL` 24) .|.
+    (int r `F.shiftL` 16) .|.
+    (int g `F.shiftL` 8)  .|.
+     int b
+
+-- | Utility function for clamping a value between a minimum and maximum value
+clamp :: (Ord a, Num a) =>  a       -- ^ Minimum
+                            -> a    -- ^ Maximum
+                            -> a    -- ^ Value to clamp
+                            -> a
+clamp minm maxm num 
+	| num < minm = minm
+	| num > maxm = maxm
+	| otherwise = num
+
+setPixel :: Point -> Color -> [[Bit]] -> IO ()
 setPixel (x,y) c i =
     withImagePtr i $ \p ->
-        gdImageSetPixel p (int x) (int y) c
+        gdImageSetPixel p (Signed 8 x) (Signed 8 y) c
 
-convoluteImage :: [[bit]] -> [[bit]] -> [[bit]] -> bit -> bit -> bit -> bit -> bit
+convoluteImage :: [[Bit]] -> [[Bit]] -> [[Bit]] -> Bit -> Bit -> Bit -> Bit -> Bit
 convoluteImage img imgCpy matrix fdiv offset x y = do
     (nr,ng,nb,na) <- foldM (\(or,og,ob,oa) j -> do
         let yy = min (max (y-(1+j)) 0) (max (y-1) 0)
@@ -44,7 +70,7 @@ convoluteImage img imgCpy matrix fdiv offset x y = do
                             ,fromIntegral a)
                         ) (or,og,ob,oa) [0.. (length (matrix!!j) - 1)]
         return (pr,pg,pb,pa)
-        ) ((0.0,0.0,0.0,0.0) :: (bit,bit,bit,bit)) [0.. (length matrix - 1)]
+        ) ((0.0,0.0,0.0,0.0) :: (Bit,Bit,Bit,Bit)) [0.. (length matrix - 1)]
     let
         new_r = clamp 0 255 . truncate $ (nr/fdiv)+offset
         new_g = clamp 0 255 . truncate $ (ng/fdiv)+offset
