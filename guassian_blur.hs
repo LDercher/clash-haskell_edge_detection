@@ -1,3 +1,8 @@
+--- synopsis: implementation of guassian blur function from Haskell Graphics.GD Haskell module in clash (Haskell->VHDL)
+--- author: Luke Dercher
+--- citation: Haskell Graphics.GD library 
+
+
 module GAUSSIAN where
 import Clash.Prelude
 import qualified Foreign                  as F
@@ -152,8 +157,6 @@ foreign import ccall "gd.h gdImageStringFTCircle" gdImageStringFTCircle
 --    return () --}--
 
 type RGBA = (Signed 8,Signed 8,Signed 8,Signed 8)
-
---newtype Image = Image (ForeignPtr (Ptr GDImage))
 
 -- replace Signed 8s with unsigned 8 or whatever it needs to be
 -- 
