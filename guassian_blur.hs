@@ -183,7 +183,7 @@ toRGBA c = (fromIntegral r, fromIntegral g, fromIntegral b, fromIntegral a)
    -- We use a second level of indirection to allow storing a null pointer
 -- when the image has already been freed. This allows 'withImage' to 
 -- free the @gdImage@ early.
-newtype Image = Image (ForeignPtr (Ptr GDImage))
+newtype Image = Vec (Vec 256 (Signed 256))--(Vec 256 (Signed 8))-- Image (ForeignPtr (Ptr GDImage))
    
 -- | Retrieves the color index or the color values of a particular pixel.
 getPixel :: (Int,Int) -> Image -> IO Color
