@@ -125,7 +125,7 @@ foreign import ccall "gd.h gdImageSetAntiAliased" gdImageSetAntiAliased
         :: Ptr GDImage -> CInt -> IO ()
     
 foreign import ccall "gd.h gdImageSetPixel" gdImageSetPixel
-        :: Ptr GDImage -> CInt -> CInt -> CInt -> IO ()
+        :: Ptr GDImage -> Signed 32 -> Signed 32 -> Signed 32 -> IO ()
     
 foreign import ccall "gd.h gdImageColorAllocate" gdImageColorAllocate
         :: Ptr GDImage -> CInt -> CInt -> CInt -> CInt -> IO CInt
@@ -156,17 +156,17 @@ foreign import ccall "gd.h gdImageStringFTCircle" gdImageStringFTCircle
 --        ) [0..(height-1)] 
 --    return () --}--
 
-type RGBA = (Signed 8,Signed 8,Signed 8,Signed 8)
+type RGBA = (Signed 256,Signed 256,Signed 256,Signed 256)
 
--- replace Signed 8s with unsigned 8 or whatever it needs to be
+-- replace Signed 256s with unSigned 256 or whatever it needs to be
 -- 
 
 
-type Size = (Signed 8,Signed 8)
+type Size = (Signed 256,Signed 256)
 
-type Point = (Signed 8,Signed 8)
+type Point = (Signed 256,Signed 256)
 
-type Color = Signed 8
+type Color = Signed 256
 
 
 
@@ -183,17 +183,17 @@ toRGBA c = (fromIntegral r, fromIntegral g, fromIntegral b, fromIntegral a)
    -- We use a second level of indirection to allow storing a null pointer
 -- when the image has already been freed. This allows 'withImage' to 
 -- free the @gdImage@ early.
-newtype Image = Vec (Vec 256 (Signed 256))--(Vec 256 (Signed 8))-- Image (ForeignPtr (Ptr GDImage))
+type Image = Vec 256 (Vec 256 (Signed 256))--(Vec 256 (Signed 256))-- Image (ForeignPtr (Ptr GDImage))
    
 -- | Retrieves the color index or the color values of a particular pixel.
-getPixel :: (Int,Int) -> Image -> IO Color
+getPixel :: (Signed 256, Signed 256) -> Image -> IO Color
 getPixel (x,y) i = withImagePtr i f
     where f p' = gdImageGetPixel p' (int x) (int y)
 
-rgba :: Signed 8 -- ^ Red (0-255)
-          -> Signed 8 -- ^ Green (0-255)
-          -> Signed 8 -- ^ Blue (0-255)
-          -> Signed 8 -- ^ Alpha (0-127), 0 is opaque, 127 is transparent
+rgba :: Signed 256 -- ^ Red (0-255)
+          -> Signed 256 -- ^ Green (0-255)
+          -> Signed 256 -- ^ Blue (0-255)
+          -> Signed 256 -- ^ Alpha (0-127), 0 is opaque, 127 is transparent
           -> Color
 rgba r g b a = 
     (int a `F.shiftL` 24) .|.
@@ -211,12 +211,12 @@ clamp minm maxm num
 	| num > maxm = maxm
 	| otherwise = num
 
-setPixel :: Point -> Color -> Vec n3 (Vec n2 (Signed 8)) -> IO ()
+setPixel :: Point -> Color -> Vec n3 (Vec n2 (Signed 256)) -> IO ()
 setPixel (x,y) c i =
     withImagePtr i $ \p ->
-        gdImageSetPixel p (Signed 8 x) (Signed 8 y) c
+        gdImageSetPixel p (Signed 256 x) (Signed 256 y) c
 
-convoluteImage :: Vec n3 (Vec n2 (Signed 8)) ->Vec n3 (Vec n2 (Signed 8)) -> Vec n3 (Vec n2 (Signed 8)) -> Signed 8 -> Signed 8 -> Signed 8 -> Signed 8 -> Signed 8
+convoluteImage :: Image -> Image -> Image -> Signed 256 -> Signed 256 -> Signed 256 -> Signed 256 -> IO ()
 convoluteImage img imgCpy matrix fdiv offset x y = do
     (nr,ng,nb,na) <- foldM (\(or,og,ob,oa) j -> do
         let yy = min (max (y-(1+j)) 0) (max (y-1) 0)
@@ -230,7 +230,7 @@ convoluteImage img imgCpy matrix fdiv offset x y = do
                             ,fromIntegral a)
                         ) (or,og,ob,oa) [0.. 255] -- length (matrix!!j) - 1)] make matrix dimensions static size 255 for now
         return (pr,pg,pb,pa)
-        ) ((0.0,0.0,0.0,0.0) :: (Signed 8,Signed 8,Signed 8,Signed 8)) [0.. 255]
+        ) ((0.0,0.0,0.0,0.0) :: (Signed 256,Signed 256,Signed 256,Signed 256)) [0.. 255]
     let
         new_r = clamp 0 255 . truncate $ (nr/fdiv)+offset
         new_g = clamp 0 255 . truncate $ (ng/fdiv)+offset
