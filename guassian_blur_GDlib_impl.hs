@@ -183,7 +183,15 @@ toRGBA c = (fromIntegral r, fromIntegral g, fromIntegral b, fromIntegral a)
    -- We use a second level of indirection to allow storing a null pointer
 -- when the image has already been freed. This allows 'withImage' to 
 -- free the @gdImage@ early.
-newtype Image = Vec (Vec 256 (Signed 256))--(Vec 256 (Signed 8))-- Image (ForeignPtr (Ptr GDImage))
+newtype Image = Vec (Vec 256 (Signed 256)) -- Image (ForeignPtr (Ptr GDImage))
+
+-- * Lists with their length encoded in their type
+-- * 'Vec'tor elements have an __ASCENDING__ subscript starting from 0 and
+--   ending at 'maxIndex' (== 'length' - 1).
+-- data Vec :: Nat -> * -> * where
+--    Nil  :: Vec 0 a
+--    Cons :: a -> Vec n a -> Vec (n + 1) a
+--  {-# WARNING Cons "Use ':>' instead of 'Cons'" #-}
    
 -- | Retrieves the color index or the color values of a particular pixel.
 getPixel :: (Int,Int) -> Image -> IO Color
@@ -211,12 +219,12 @@ clamp minm maxm num
 	| num > maxm = maxm
 	| otherwise = num
 
-setPixel :: Point -> Color -> Vec n3 (Vec n2 (Signed 8)) -> IO ()
+setPixel :: Point -> Color -> Image -> IO ()
 setPixel (x,y) c i =
     withImagePtr i $ \p ->
-        gdImageSetPixel p (Signed 8 x) (Signed 8 y) c
+        gdImageSetPixel p (Signed  256 x) (Signed 256 y) c
 
-convoluteImage :: Vec n3 (Vec n2 (Signed 8)) ->Vec n3 (Vec n2 (Signed 8)) -> Vec n3 (Vec n2 (Signed 8)) -> Signed 8 -> Signed 8 -> Signed 8 -> Signed 8 -> Signed 8
+convoluteImage :: Image -> Image -> Image -> Signed 256 -> Signed 256 -> Signed 256 -> Signed 256 -> Signed 256
 convoluteImage img imgCpy matrix fdiv offset x y = do
     (nr,ng,nb,na) <- foldM (\(or,og,ob,oa) j -> do
         let yy = min (max (y-(1+j)) 0) (max (y-1) 0)
@@ -230,7 +238,7 @@ convoluteImage img imgCpy matrix fdiv offset x y = do
                             ,fromIntegral a)
                         ) (or,og,ob,oa) [0.. 255] -- length (matrix!!j) - 1)] make matrix dimensions static size 255 for now
         return (pr,pg,pb,pa)
-        ) ((0.0,0.0,0.0,0.0) :: (Signed 8,Signed 8,Signed 8,Signed 8)) [0.. 255]
+        ) ((0.0,0.0,0.0,0.0) :: (Signed 256,Signed 256,Signed 256,Signed 256)) [0.. 255]
     let
         new_r = clamp 0 255 . truncate $ (nr/fdiv)+offset
         new_g = clamp 0 255 . truncate $ (ng/fdiv)+offset
