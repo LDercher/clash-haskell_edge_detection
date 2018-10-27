@@ -183,19 +183,7 @@ toRGBA c = (fromIntegral r, fromIntegral g, fromIntegral b, fromIntegral a)
    -- We use a second level of indirection to allow storing a null pointer
 -- when the image has already been freed. This allows 'withImage' to 
 -- free the @gdImage@ early.
-<<<<<<< HEAD:guassian_blur_GDlib_impl.hs
-newtype Image = Vec (Vec 256 (Signed 256)) -- Image (ForeignPtr (Ptr GDImage))
-
--- * Lists with their length encoded in their type
--- * 'Vec'tor elements have an __ASCENDING__ subscript starting from 0 and
---   ending at 'maxIndex' (== 'length' - 1).
--- data Vec :: Nat -> * -> * where
---    Nil  :: Vec 0 a
---    Cons :: a -> Vec n a -> Vec (n + 1) a
---  {-# WARNING Cons "Use ':>' instead of 'Cons'" #-}
-=======
 type Image = Vec 256 (Vec 256 (Signed 256))--(Vec 256 (Signed 256))-- Image (ForeignPtr (Ptr GDImage))
->>>>>>> e9356e296048021a64bdcbba80155019b22193da:guassian_blur.hs
    
 -- | Retrieves the color index or the color values of a particular pixel.
 getPixel :: (Signed 256, Signed 256) -> Image -> IO Color
@@ -223,21 +211,12 @@ clamp minm maxm num
 	| num > maxm = maxm
 	| otherwise = num
 
-<<<<<<< HEAD:guassian_blur_GDlib_impl.hs
-setPixel :: Point -> Color -> Image -> IO ()
-setPixel (x,y) c i =
-    withImagePtr i $ \p ->
-        gdImageSetPixel p (Signed  256 x) (Signed 256 y) c
-
-convoluteImage :: Image -> Image -> Image -> Signed 256 -> Signed 256 -> Signed 256 -> Signed 256 -> Signed 256
-=======
 setPixel :: Point -> Color -> Vec n3 (Vec n2 (Signed 256)) -> IO ()
 setPixel (x,y) c i =
     withImagePtr i $ \p ->
         gdImageSetPixel p (Signed 256 x) (Signed 256 y) c
 
 convoluteImage :: Image -> Image -> Image -> Signed 256 -> Signed 256 -> Signed 256 -> Signed 256 -> IO ()
->>>>>>> e9356e296048021a64bdcbba80155019b22193da:guassian_blur.hs
 convoluteImage img imgCpy matrix fdiv offset x y = do
     (nr,ng,nb,na) <- foldM (\(or,og,ob,oa) j -> do
         let yy = min (max (y-(1+j)) 0) (max (y-1) 0)
