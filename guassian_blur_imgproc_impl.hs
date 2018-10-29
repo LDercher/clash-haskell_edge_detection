@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 -- Adaptation of 
 -- Module      : Graphics.Image.Processing.Filter
 -- Copyright   : (c) Alexey Kuleshevich 2017
@@ -11,7 +13,83 @@
 -- http://hackage.haskell.org/package/hip-1.5.3.0/docs/src/Graphics-Image-Interface-Vector-Storable.html#VS
 -- https://hackage.haskell.org/package/hip-1.5.3.0/src/src/Graphics/Image/Interface/Vector/Generic.hs
 module GAUSSIAN where
+
 import Clash.Prelude
+import qualified Data.Vector.Generic         as VG
+import qualified Data.Vector.Unboxed               as VU
+import           Data.Typeable                     (Typeable, showsTypeRep,
+                                                    typeRep)
+--https://hackage.haskell.org/package/hip-1.0.1/candidate/docs/src/Graphics-Image-Interface.html#Elevator
+
+
+class Elevator e where
+
+  toWord8 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 8)
+
+  toWord16 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 16)
+
+  toWord32 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 32)
+
+  toWord64 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 64)
+
+  toFloat :: ColorSpace cs => Pixel cs e -> Pixel cs Float
+
+  toDouble :: ColorSpace cs => Pixel cs e -> Pixel cs Double
+
+  fromDouble :: ColorSpace cs => Pixel cs Double -> Pixel cs e
+
+
+  data Image arr cs e
+
+  -- | Create an Image by supplying it's dimensions and a pixel generating
+  -- function.
+  makeImage :: (Int, Int) -- ^ (@m@ rows, @n@ columns) - dimensions of a new image.
+          -> ((Int, Int) -> Pixel cs e)
+          -- ^ A function that takes (@i@-th row, and @j@-th column) as an
+          -- argument and returns a pixel for that location.
+          -> Image arr cs e
+
+  -- | Create a singleton image, required for various operations on images with
+  -- a scalar.
+  singleton :: Pixel cs e -> Image arr cs e
+
+
+--http://hackage.haskell.org/package/hip-1.5.3.0/docs/src/Graphics-Image-Interface.html#Border
+
+data family Pixel cs e :: *
+
+class (Eq cs, Enum cs, Show cs, Bounded cs, Typeable cs,
+      Eq (Pixel cs e), VU.Unbox (Components cs e), Elevator e)
+      => ColorSpace cs e where
+  
+  type Components cs e
+  
+    -- | Convert a Pixel to a representation suitable for storage as an unboxed
+    -- element, usually a tuple of channels.
+  toComponents :: Pixel cs e -> Components cs e
+  
+    -- | Convert from an elemnt representation back to a Pixel.
+  fromComponents :: Components cs e -> Pixel cs e
+  
+    -- | Construt a Pixel by replicating the same value across all of the components.
+  promote :: e -> Pixel cs e
+  
+    -- | Retrieve Pixel's component value
+  getPxC :: Pixel cs e -> cs -> e
+  
+    -- | Set Pixel's component value
+  setPxC :: Pixel cs e -> cs -> e -> Pixel cs e
+  
+    -- | Map a channel aware function over all Pixel's components.
+  mapPxC :: (cs -> e -> e) -> Pixel cs e -> Pixel cs e
+  
+    -- | Map a function over all Pixel's componenets.
+  liftPx :: (e -> e) -> Pixel cs e -> Pixel cs e
+  
+    -- | Zip two Pixels with a function.
+  liftPx2 :: (e -> e -> e) -> Pixel cs e -> Pixel cs e -> Pixel cs e
+  
+  
 
 data VGImage v p =
   VGImage {-# UNPACK #-}!Int
@@ -22,16 +100,6 @@ makeImageVG sz f =
   let (m, n) = checkDimsVG "makeImageVGM" sz in
     VGImage m n $ VG.generate (m * n) (f . toIx n)
 {-# INLINE makeImageVG #-}
-
-foldlVG :: VG.Vector v p =>
-           (a -> p -> a) -> a -> VGImage v p -> a
-foldlVG f px0 (VGImage _ _ v) = VG.foldl' f px0 v
-{-# INLINE foldlVG #-}
-
-Ifold f px0 (VSImage img) = foldlVG f px0 img
-
-
-
 
 
 
@@ -90,6 +158,8 @@ data Border px =
   deriving Show
 
 
+
+ -- http://hackage.haskell.org/package/hip-1.5.3.0/docs/src/Graphics-Image-Processing-Filter.html
 
 -- | Create a Gaussian Filter.
 --
