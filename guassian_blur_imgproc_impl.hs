@@ -22,21 +22,28 @@ import           Data.Typeable                     (Typeable, showsTypeRep,
 --https://hackage.haskell.org/package/hip-1.0.1/candidate/docs/src/Graphics-Image-Interface.html#Elevator
 
 
-class Elevator e where
+class (Eq e, Num e, Typeable e, VU.Unbox e) => Elevator e where
 
-  toWord8 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 8)
+  -- | Values are scaled to @[0, 255]@ range.
+  toWord8 :: e -> Signed 8
 
-  toWord16 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 16)
+  -- | Values are scaled to @[0, 65535]@ range.
+  toWord16 :: e -> Signed 16
 
-  toWord32 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 32)
+  -- | Values are scaled to @[0, 4294967295]@ range.
+  toWord32 :: e -> Signed 32
 
-  toWord64 :: ColorSpace cs => Pixel cs e -> Pixel cs (Signed 64)
+  -- | Values are scaled to @[0, 18446744073709551615]@ range.
+  toWord64 :: e -> Signed 64
 
-  toFloat :: ColorSpace cs => Pixel cs e -> Pixel cs Float
+  -- | Values are scaled to @[0.0, 1.0]@ range.
+  toFloat :: e -> Float
 
-  toDouble :: ColorSpace cs => Pixel cs e -> Pixel cs Double
+  -- | Values are scaled to @[0.0, 1.0]@ range.
+  toDouble :: e -> Double
 
-  fromDouble :: ColorSpace cs => Pixel cs Double -> Pixel cs e
+  -- | Values are scaled from @[0.0, 1.0]@ range.
+  fromDouble :: Double -> e
 
 
   data Image arr cs e
@@ -95,7 +102,7 @@ data VGImage v p =
   VGImage {-# UNPACK #-}!Int
           {-# UNPACK #-}!Int
 
-makeImageVG :: VG.Vector v p => (Int, Int) -> ((Int, Int) -> p) -> VGImage v p
+makeImageVG ::  {- VG.Vector v p => -} (Int, Int) -> ((Int, Int) -> p) -> VGImage v p
 makeImageVG sz f =
   let (m, n) = checkDimsVG "makeImageVGM" sz in
     VGImage m n $ VG.generate (m * n) (f . toIx n)
@@ -164,7 +171,7 @@ data Border px =
 -- | Create a Gaussian Filter.
 --
 -- @since 1.5.3
-gaussianLowPass :: (Vec 256 arr cs e, Vec 256 arr a e, Floating e, Fractional e) =>
+gaussianLowPass :: (Floating e, RealFrac e) =>
                    Int -- ^ Radius
                 -> e -- ^ Sigma
                 -> Border (Pixel cs e) -- ^ Border resolution technique.
@@ -190,6 +197,6 @@ gaussianLowPass r sigma border =
 -- `gaussianLowPass` can be used instead.
 --
 -- @since 1.5.3
-gaussianBlur :: (Vec 256 arr cs e, Vec 256 arr a e, Floating e, RealFrac e) => e -> Filter arr cs e
+gaussianBlur :: (Floating e, RealFrac e) => e -> Filter arr cs e
 gaussianBlur sigma = gaussianLowPass (ceiling (2*sigma)) sigma Edge
 
