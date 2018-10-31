@@ -15,10 +15,45 @@
 module GAUSSIAN where
 
 import Clash.Prelude
-import qualified Data.Vector.Generic         as VG
+import qualified Data.Vector.Generic               as VG
 import qualified Data.Vector.Unboxed               as VU
+--import           Graphics.Image.Interface          as I
 import           Data.Typeable                     (Typeable, showsTypeRep,
                                                     typeRep)
+
+---https://hackage.haskell.org/package/hip-1.0.1/candidate/docs/src/Graphics-Image-Interface.html#ColorSpace
+
+-- | Array representation that is actually has real data stored in memory, hence
+-- allowing for image indexing, forcing pixels into computed state etc.
+class Vec arr cs  => ManifestArray arr cs e where
+
+  -- | Get a pixel at @i@-th and @j@-th location.
+  --
+  -- >>> let grad_gray = makeImage (200, 200) (\(i, j) -> PixelY $ fromIntegral (i*j)) / (200*200)
+  -- >>> index grad_gray (20, 30) == PixelY ((20*30) / (200*200))
+  -- True
+  --
+  index :: Image arr cs e -> (Int, Int) -> Pixel cs e
+  
+  -- | Make sure that an image is fully evaluated.
+  deepSeqImage :: Image arr cs e -> a -> a
+
+  -- | Perform matrix multiplication on two images. Inner dimensions must agree.
+  (|*|) :: Image arr cs e -> Image arr cs e -> Image arr cs e
+
+  -- | Undirected reduction of an image.
+  ifold :: (Pixel cs e -> Pixel cs e -> Pixel cs e) -- ^ An associative folding function.
+       -> Pixel cs e -- ^ Initial element, that is neutral with respect to the folding function.
+       -> Image arr cs e -- ^ Source image.
+       -> Pixel cs e
+
+  -- | Pixelwise equality function of two images. Images are
+  -- considered distinct if either images' dimensions or at least one pair of
+  -- corresponding pixels are not the same. Used in defining an in instance for
+  -- the 'Eq' typeclass.
+  --eq :: Eq (Pixel cs e) => Image arr cs e -> Image arr cs e -> Bool
+
+
 --https://hackage.haskell.org/package/hip-1.0.1/candidate/docs/src/Graphics-Image-Interface.html#Elevator
 
 
@@ -182,7 +217,7 @@ gaussianLowPass r sigma border =
     gV = compute $ (gauss / scalar weight)
     gV' = compute $ transpose gV
     gauss = makeImage (1, n) getPx
-    weight = Ifold (+) 0 gauss
+    weight = ifold (+) 0 gauss
     n = 2 * r + 1
     sigma2sq = 2 * sigma ^ (2 :: Int)
     getPx (_, j) = promote $ exp (fromIntegral (-((j - r) ^ (2 :: Int))) / sigma2sq)
