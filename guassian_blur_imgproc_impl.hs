@@ -1,5 +1,14 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE BangPatterns            #-}
+{-# LANGUAGE CPP                     #-}
+{-# LANGUAGE ConstraintKinds         #-}
+{-# LANGUAGE FlexibleContexts        #-}
+{-# LANGUAGE Rank2Types              #-}
+{-# LANGUAGE ScopedTypeVariables     #-}
+{-# LANGUAGE TypeFamilies            #-}
+{-# LANGUAGE UndecidableInstances    #-}
+{-# LANGUAGE ViewPatterns            #-}
 -- Adaptation of 
 -- Module      : Graphics.Image.Processing.Filter
 -- Copyright   : (c) Alexey Kuleshevich 2017
@@ -36,12 +45,14 @@ import Control.Applicative
 import Control.Monad.Primitive (PrimMonad (..))
 import qualified Data.Colour as C
 
+
+
 -- | This class has all included color spaces installed into it and is also
 -- intended for implementing any other possible custom color spaces. Every
 -- instance of this class automatically installs an associated 'Pixel' into
 -- 'Num', 'Fractional', 'Floating', 'Functor', 'Applicative' and 'Foldable',
 -- which in turn make it possible to be used by the rest of the library.
-class (Eq cs, Enum cs, Show cs, Typeable cs) => ColorSpace cs where
+{- class (Eq cs, Enum cs, Show cs, Typeable cs) => ColorSpace cs where
   
   -- | Representation of a pixel, such that it can be an element of any
   -- Array. Which is usally a tuple of channels or a channel itself for single
@@ -77,7 +88,7 @@ class (Eq cs, Enum cs, Show cs, Typeable cs) => ColorSpace cs where
   pxFoldMap :: Monoid m => (e -> m) -> Pixel cs e -> m
 
   -- | Get a pure colour representation of a channel.
-  csColour :: cs -> C.AlphaColour Double
+  csColour :: cs -> C.AlphaColour Double -}
   
 
 -- | A color space that supports transparency.
@@ -109,9 +120,9 @@ class (ColorSpace (Opaque cs), ColorSpace cs) => Alpha cs where
 --
 -- >>> let rgb = PixelRGB 0.0 0.5 1.0 :: Pixel RGB Double
 -- >>> toWord8 rgb
--- <RGB:(0|128|255)>
+-- <RGB:(0|128|255)> 
 --
-class Elevator e where
+{- class Elevator e where
 
   toWord8 :: ColorSpace cs => Pixel cs e -> Pixel cs Word8
 
@@ -125,7 +136,7 @@ class Elevator e where
 
   toDouble :: ColorSpace cs => Pixel cs e -> Pixel cs Double
 
-  fromDouble :: ColorSpace cs => Pixel cs Double -> Pixel cs e
+  fromDouble :: ColorSpace cs => Pixel cs Double -> Pixel cs e -}
 
 
 -- | Base array like representation for an image.
@@ -601,9 +612,70 @@ instance MutableArray arr cs e => Show (MImage st arr cs e) where
     "<MutableImage "Prelude.++show (Prelude.undefined :: arr)Prelude.++" "Prelude.++
     ((showsTypeRep (typeOf (Prelude.undefined :: cs))) " (")Prelude.++
     ((showsTypeRep (typeOf (Prelude.undefined :: e))) "): "Prelude.++show m Prelude.++"x"Prelude.++show n Prelude.++">")
+{-# LANGUAGE ViewPatterns, CPP #-} 
 
 ---https://hackage.haskell.org/package/hip-1.0.1/candidate/docs/src/Graphics-Image-Interface.html#ColorSpace
 
+-- http://hackage.haskell.org/package/hip-1.5.3.0/docs/src/Graphics-Image-Interface.html#promote
+
+-- | A Pixel family with a color space and a precision of elements.
+ data family Pixel cs e :: *
+
+
+class (Eq cs, Enum cs, Show cs, Bounded cs, Typeable cs,
+      Eq (Pixel cs e), VU.Unbox (Components cs e), Elevator e)
+      => ColorSpace cs e where
+
+  type Components cs e
+
+  -- | Convert a Pixel to a representation suitable for storage as an unboxed
+  -- element, usually a tuple of channels.
+  toComponents :: Pixel cs e -> Components cs e
+
+  -- | Convert from an elemnt representation back to a Pixel.
+  fromComponents :: Components cs e -> Pixel cs e
+
+  -- | Construt a Pixel by replicating the same value across all of the components.
+  promote :: e -> Pixel cs e
+
+  -- | Retrieve Pixel's component value
+  getPxC :: Pixel cs e -> cs -> e
+
+  -- | Set Pixel's component value
+  setPxC :: Pixel cs e -> cs -> e -> Pixel cs e
+
+  -- | Map a channel aware function over all Pixel's components.
+  mapPxC :: (cs -> e -> e) -> Pixel cs e -> Pixel cs e
+
+  -- | Map a function over all Pixel's componenets.
+  liftPx :: (e -> e) -> Pixel cs e -> Pixel cs e
+
+  -- | Zip two Pixels with a function.
+  liftPx2 :: (e -> e -> e) -> Pixel cs e -> Pixel cs e -> Pixel cs e
+
+  -- | Left fold on two pixels a the same time.
+  foldlPx2 :: (b -> e -> e -> b) -> b -> Pixel cs e -> Pixel cs e -> b
+
+  -- | Right fold over all Pixel's components.
+  foldrPx :: (e -> b -> b) -> b -> Pixel cs e -> b
+  foldrPx f !z0 !xs = foldlPx f' id xs z0
+      where f' k x !z = k $! f x z
+
+  -- | Left strict fold over all Pixel's components.
+  foldlPx :: (b -> e -> b) -> b -> Pixel cs e -> b
+  foldlPx f !z0 !xs = foldrPx f' id xs z0
+      where f' x k !z = k $! f z x
+
+  foldl1Px :: (e -> e -> e) -> Pixel cs e -> e
+  foldl1Px f !xs = fromMaybe (error "foldl1Px: empty Pixel")
+                  (foldlPx mf Nothing xs)
+      where
+        mf m !y = Just (case m of
+                           Nothing -> y
+                           Just x  -> f x y)
+  toListPx :: Pixel cs e -> [e]
+  toListPx !px = foldr' f [] (enumFrom (toEnum 0))
+    where f !cs !ls = getPxC px cs:ls 
 
 
 --http://hackage.haskell.org/package/hip-1.5.3.0/docs/src/Graphics-Image-Interface.html#Border
@@ -644,7 +716,8 @@ gaussianLowPass r sigma border =
     n = 2 * r + 1
     sigma2sq = 2 * sigma ^ (2 :: Int)
     getPx (_, j) = promote $ exp (fromIntegral (-((j - r) ^ (2 :: Int))) / sigma2sq)
-
+    {-# INLINE getPx #-}
+{-# INLINE gaussianLowPass #-}
 
 
 
