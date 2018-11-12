@@ -14,174 +14,429 @@ import Data.Monoid (Monoid)
 import Data.Foldable (Foldable(foldMap))
 -- #endif
 import GHC.Exts (Constraint)
-import Data.Typeable (Typeable, showsTypeRep, typeOf)
+import Data.Typeable --(Typeable, showsTypeRep, typeOf, Proxy)
 import Control.DeepSeq (NFData(rnf))
 import Data.Word
+import           Control.Monad.ST
 import Control.Applicative
 import Control.Monad.Primitive (PrimMonad (..))
-import qualified Data.Colour as C
+import qualified Data.Complex  as C
 --import           Graphics.Image.Interface              as I
 --import           Graphics.Image.Processing.Convolution
 --import           Graphics.Image.ColorSpace               (X)
 
+-- | Correlate an image with a kernel. Border resolution technique is required.
+correlate :: (Array arr X e, Array arr cs e)
+          => Border (Pixel cs e) -> Image arr X e -> Image arr cs e -> Image arr cs e
+correlate !border !kernel !img =
+  makeImageWindowed
+    sz
+    (kM2, kN2)
+    (m - kM2 * 2, n - kN2 * 2)
+    (getStencil (unsafeIndex imgM))
+    (getStencil (borderIndex border imgM))
+  where
+    !imgM = toManifest img
+    !sz@(m, n) = dims img
+    !kernelM = toManifest kernel
+    !(kM, kN) = dims kernel
+    !(kM2, kN2) = (kM `div` 2, kN `div` 2)
+    getStencil getImgPx !(i, j) =
+      loop 0 (< kM) (+ 1) 0 $ \ !iK !acc0 ->
+        let !iD = i + iK - kM2 in
+          loop 0 (< kN) (+ 1) acc0 $ \ !jK !acc1 ->
+            let !jD = j + jK - kN2 in
+              acc1 + liftPx (* getX (unsafeIndex kernelM (iK, jK))) (getImgPx (iD, jD))
+    {-# INLINE getStencil #-}
+{-# INLINE correlate #-}
+
 data X = X deriving (Eq, Enum, Bounded, Show, Typeable)
 
+class (Eq e, Num e, Typeable e, VU.Unbox e) => Elevator e where
 
-newtype instance Pixel X e = PixelX { getX :: e } deriving (Ord, Eq)
+  -- | Values are scaled to @[0, 255]@ range.
+  toWord8 :: e -> Word8
 
+  -- | Values are scaled to @[0, 65535]@ range.
+  toWord16 :: e -> Word16
 
-instance Show e => Show (Pixel X e) where
-  show (PixelX g) = "<X:("++show g++")>"
+  -- | Values are scaled to @[0, 4294967295]@ range.
+  toWord32 :: e -> Word32
 
+  -- | Values are scaled to @[0, 18446744073709551615]@ range.
+  toWord64 :: e -> Word64
 
-instance Elevator e => ColorSpace X e where
-  type Components X e = e
+  -- | Values are scaled to @[0.0, 1.0]@ range.
+  toFloat :: e -> Float
 
-  promote = PixelX
-  {-# INLINE promote #-}
-  fromComponents = PixelX
-  {-# INLINE fromComponents #-}
-  toComponents (PixelX g) = g
-  {-# INLINE toComponents #-}
-  getPxC (PixelX g) X = g
-  {-# INLINE getPxC #-}
-  setPxC (PixelX _) X g = PixelX g
-  {-# INLINE setPxC #-}
-  mapPxC f (PixelX g) = PixelX (f X g)
-  {-# INLINE mapPxC #-}
-  liftPx = fmap
-  {-# INLINE liftPx #-}
-  liftPx2 = liftA2
-  {-# INLINE liftPx2 #-}
-  foldlPx = foldl'
-  {-# INLINE foldlPx #-}
-  foldlPx2 f !z (PixelX g1) (PixelX g2) = f z g1 g2
-  {-# INLINE foldlPx2 #-}
+  -- | Values are scaled to @[0.0, 1.0]@ range.
+  toDouble :: e -> Double
+
+  -- | Values are scaled from @[0.0, 1.0]@ range.
+  fromDouble :: Double -> e
 
 
-instance Functor (Pixel X) where
-  fmap f (PixelX g) = PixelX (f g)
-  {-# INLINE fmap #-}
+-- | Lower the precision
+dropDown :: forall a b. (Integral a, Bounded a, Integral b, Bounded b) => a -> b
+dropDown !e = fromIntegral $ fromIntegral e `div` ((maxBound :: a) `div`
+                                                   fromIntegral (maxBound :: b))
+{-# INLINE dropDown #-}
+
+-- | Increase the precision
+raiseUp :: forall a b. (Integral a, Bounded a, Integral b, Bounded b) => a -> b
+raiseUp !e = fromIntegral e * ((maxBound :: b) `div` fromIntegral (maxBound :: a))
+{-# INLINE raiseUp #-}
+
+-- | Convert to fractional with value less than or equal to 1.
+squashTo1 :: forall a b. (Fractional b, Integral a, Bounded a) => a -> b
+squashTo1 !e = fromIntegral e / fromIntegral (maxBound :: a)
+{-# INLINE squashTo1 #-}
+
+-- | Convert to integral streaching it's value up to a maximum value.
+stretch :: forall a b. (RealFrac a, Floating a, Integral b, Bounded b) => a -> b
+stretch !e = round (fromIntegral (maxBound :: b) * clamp01 e)
+{-# INLINE stretch #-}
 
 
-instance Applicative (Pixel X) where
-  pure = PixelX
-  {-# INLINE pure #-}
-  (PixelX fg) <*> (PixelX g) = PixelX (fg g)
-  {-# INLINE (<*>) #-}
+-- | Clamp a value to @[0, 1]@ range.
+clamp01 :: (Ord a, Floating a) => a -> a
+clamp01 !x = min (max 0 x) 1
+{-# INLINE clamp01 #-}
 
 
-instance Foldable (Pixel X) where
-  foldr f !z (PixelX g) = f g z
-  {-# INLINE foldr #-}
+-- | Values between @[0, 255]]@
+instance Elevator Word8 where
+  toWord8 = id
+  {-# INLINE toWord8 #-}
+  toWord16 = raiseUp
+  {-# INLINE toWord16 #-}
+  toWord32 = raiseUp
+  {-# INLINE toWord32 #-}
+  toWord64 = raiseUp
+  {-# INLINE toWord64 #-}
+  toFloat = squashTo1
+  {-# INLINE toFloat #-}
+  toDouble = squashTo1
+  {-# INLINE toDouble #-}
+  fromDouble = toWord8
+  {-# INLINE fromDouble #-}
 
 
-instance Monad (Pixel X) where
-
-  return = PixelX
-  {-# INLINE return #-}
-
-  (>>=) (PixelX g) f = f g
-  {-# INLINE (>>=) #-}
-
-
-instance Storable e => Storable (Pixel X e) where
-
-  sizeOf _ = sizeOf (undefined :: e)
-  {-# INLINE sizeOf #-}
-  alignment _ = alignment (undefined :: e)
-  {-# INLINE alignment #-}
-  peek !p = do
-    q <- return $ castPtr p
-    g <- peek q
-    return (PixelX g)
-  {-# INLINE peek #-}
-  poke !p (PixelX g) = do
-    q <- return $ castPtr p
-    poke q g
-  {-# INLINE poke #-}
+-- | Values between @[0, 65535]]@
+instance Elevator Word16 where
+  toWord8 = dropDown
+  {-# INLINE toWord8 #-}
+  toWord16 = id
+  {-# INLINE toWord16 #-}
+  toWord32 = raiseUp
+  {-# INLINE toWord32 #-}
+  toWord64 = raiseUp
+  {-# INLINE toWord64 #-}
+  toFloat = squashTo1
+  {-# INLINE toFloat #-}
+  toDouble = squashTo1
+  {-# INLINE toDouble #-}
+  fromDouble = toWord16
+  {-# INLINE fromDouble #-}
 
 
--- | Separate a Pixel into a list of components with 'X' pixels containing every
--- component from the pixel.
---
--- >>> toPixelsX (PixelRGB 4 5 6)
--- [<X:(4)>,<X:(5)>,<X:(6)>]
---
-toPixelsX :: ColorSpace cs e => Pixel cs e -> [Pixel X e]
-toPixelsX = foldrPx ((:) . PixelX) []
-
--- | Combine a list of `X` pixels into a Pixel with a specified channel
--- order. Not the most efficient way to construct a pixel, but might prove
--- useful to someone.
---
--- >>> fromPixelsX [(RedRGB, 3), (BlueRGB, 5), (GreenRGB, 4)]
--- <RGB:(3.0|4.0|5.0)>
--- >>> fromPixelsX $ zip (enumFrom RedRGB) (toPixelsX $ PixelRGB 4 5 6)
--- <RGB:(4.0|5.0|6.0)>
---
-fromPixelsX :: ColorSpace cs e => [(cs, Pixel X e)] -> Pixel cs e
-fromPixelsX = foldl' f (promote 0) where
-  f !px (c, PixelX x) = setPxC px c x
+-- | Values between @[0, 4294967295]@
+instance Elevator Word32 where
+  toWord8 = dropDown
+  {-# INLINE toWord8 #-}
+  toWord16 = dropDown
+  {-# INLINE toWord16 #-}
+  toWord32 = id
+  {-# INLINE toWord32 #-}
+  toWord64 = raiseUp
+  {-# INLINE toWord64 #-}
+  toFloat = squashTo1
+  {-# INLINE toFloat #-}
+  toDouble = squashTo1
+  {-# INLINE toDouble #-}
+  fromDouble = toWord32
+  {-# INLINE fromDouble #-}
 
 
+-- | Values between @[0, 18446744073709551615]@
+instance Elevator Word64 where
+  toWord8 = dropDown
+  {-# INLINE toWord8 #-}
+  toWord16 = dropDown
+  {-# INLINE toWord16 #-}
+  toWord32 = dropDown
+  {-# INLINE toWord32 #-}
+  toWord64 = id
+  {-# INLINE toWord64 #-}
+  toFloat = squashTo1
+  {-# INLINE toFloat #-}
+  toDouble = squashTo1
+  {-# INLINE toDouble #-}
+  fromDouble = toWord64
+  {-# INLINE fromDouble #-}
 
--- | Apply a left fold to each of the pixels in the image.
-squashWith :: (Array arr cs e, Array arr X b) =>
-              (b -> e -> b) -> b -> Image arr cs e -> Image arr X b
-squashWith f !a = I.map (PixelX . foldlPx f a) where
-{-# INLINE squashWith #-}
+-- | Values between @[0, 18446744073709551615]@ on 64bit
+instance Elevator Word where
+  toWord8 = dropDown
+  {-# INLINE toWord8 #-}
+  toWord16 = dropDown
+  {-# INLINE toWord16 #-}
+  toWord32 = dropDown
+  {-# INLINE toWord32 #-}
+  toWord64 = fromIntegral
+  {-# INLINE toWord64 #-}
+  toFloat = squashTo1
+  {-# INLINE toFloat #-}
+  toDouble = squashTo1
+  {-# INLINE toDouble #-}
+  fromDouble = stretch . clamp01
+  {-# INLINE fromDouble #-}
+{--
+ | Values between @[0, 127]@
+instance Elevator Int8 where
+  toWord8 = fromIntegral . (max 0)
+  {-# INLINE toWord8 #-}
+ -- toWord16 = raiseUp . (max 0)
+ -- {-# INLINE toWord16 #-}
+ -- toWord32 = raiseUp . (max 0)
+ -- {-# INLINE toWord32 #-}
+ -- toWord64 = raiseUp . (max 0)
+ -- {-# INLINE toWord64 #-}
+ -- toFloat = squashTo1 . (max 0)
+ -- {-# INLINE toFloat #-}
+ -- toDouble = squashTo1 . (max 0)
+ -- {-# INLINE toDouble #-}
+ -- fromDouble = stretch . clamp01
+ -- {-# INLINE fromDouble #-}
 
 
--- | Combination of zipWith and simultanious left fold on two pixels at the same time.
-squashWith2 :: (Array arr cs e, Array arr X b) =>
-               (b -> e -> e -> b) -> b -> Image arr cs e -> Image arr cs e -> Image arr X b
-squashWith2 f !a = I.zipWith (PixelX .:! foldlPx2 f a) where
-{-# INLINE squashWith2 #-}
+-- | Values between @[0, 32767]@
+--instance Elevator Int16 where
+--  toWord8 = dropDown . (max 0)
+--  {-# INLINE toWord8 #-}
+-- toWord16 = fromIntegral . (max 0)
+--{-# INLINE toWord16 #-}
+--  toWord32 = raiseUp . (max 0)
+--  {-# INLINE toWord32 #-}
+--  toWord64 = raiseUp . (max 0)
+--  {-# INLINE toWord64 #-}
+--  toFloat = squashTo1 . (max 0)
+--  {-# INLINE toFloat #-}
+--  toDouble = squashTo1 . (max 0)
+--  {-# INLINE toDouble #-}
+--  fromDouble = stretch . clamp01
+--  {-# INLINE fromDouble #-}
 
 
--- | Separate an image into a list of images with 'X' pixels containing every
--- channel from the source image.
---
--- >>> frog <- readImageRGB "images/frog.jpg"
--- >>> let [frog_red, frog_green, frog_blue] = toImagesX frog
--- >>> writeImage "images/frog_red.png" $ toImageY frog_red
--- >>> writeImage "images/frog_green.jpg" $ toImageY frog_green
--- >>> writeImage "images/frog_blue.jpg" $ toImageY frog_blue
---
--- <<images/frog_red.jpg>> <<images/frog_green.jpg>> <<images/frog_blue.jpg>>
---
-toImagesX :: (Array arr cs e, Array arr X e) => Image arr cs e -> [Image arr X e]
-toImagesX !img = P.map getCh (enumFrom minBound) where
-  getCh !ch = I.map (PixelX . (`getPxC` ch)) img
-  {-# INLINE getCh #-}
-{-# INLINE toImagesX #-}
+-- | Values between @[0, 2147483647]@-
+--instance Elevator Int32 where
+--  toWord8 = dropDown . (max 0)
+--  {-# INLINE toWord8 #-}
+--  toWord16 = dropDown . (max 0)
+--  {-# INLINE toWord16 #-}
+--  toWord32 = fromIntegral . (max 0)
+--  {-# INLINE toWord32 #-}
+--  toWord64 = raiseUp . (max 0)
+--  {-# INLINE toWord64 #-}
+--  toFloat = squashTo1 . (max 0)
+--  {-# INLINE toFloat #-}
+--  toDouble = squashTo1 . (max 0)
+--  {-# INLINE toDouble #-}
+-- fromDouble = stretch . clamp01
+--  {-# INLINE fromDouble #-}
 
 
--- | Combine a list of images with 'X' pixels into an image of any color
--- space, by supplying an order of color space channels.
---
--- For example here is a frog with swapped 'BlueRGB' and 'GreenRGB' channels.
---
--- >>> writeImage "images/frog_rbg.jpg" $ fromImagesX [(RedRGB, frog_red), (BlueRGB, frog_green), (GreenRGB, frog_blue)]
---
--- <<images/frog.jpg>> <<images/frog_rbg.jpg>>
---
--- It is worth noting though, despite that separating image channels can be
--- sometimes pretty useful, exactly the same effect as in example above can be
--- achieved in a much simpler and a more efficient way:
---
--- @ `I.map` (\\(PixelRGB r g b) -> PixelRGB r b g) frog @
---
-fromImagesX :: (Array arr X e, Array arr cs e) =>
-               [(cs, Image arr X e)] -> Image arr cs e
-fromImagesX = fromXs 0 where
-  updateCh !ch !px (PixelX e) = setPxC px ch e
-  {-# INLINE updateCh #-}
-  fromXs img []          = img
-  fromXs img ((c, i):xs) = fromXs (I.zipWith (updateCh c) img i) xs
-  {-# INLINE fromXs #-}
-{-# INLINE fromImagesX #-}
+-- | Values between @[0, 9223372036854775807]@
+--instance Elevator Int64 where
+--  toWord8 = dropDown . (max 0)
+--  {-# INLINE toWord8 #-}
+--  toWord16 = dropDown . (max 0)
+--  {-# INLINE toWord16 #-}
+--  toWord32 = dropDown . (max 0)
+--  {-# INLINE toWord32 #-}
+--  toWord64 = fromIntegral . (max 0)
+--  {-# INLINE toWord64 #-}
+--  toFloat = squashTo1 . (max 0)
+--  {-# INLINE toFloat #-}
+--  toDouble = squashTo1 . (max 0)
+--  {-# INLINE toDouble #-}
+--  fromDouble = stretch . clamp01
+--  {-# INLINE fromDouble #-}
+ --}
+
+-- | Values between @[0, 9223372036854775807]@ on 64bit
+instance Elevator Int where
+  toWord8 = dropDown . (max 0)
+  {-# INLINE toWord8 #-}
+  toWord16 = dropDown . (max 0)
+  {-# INLINE toWord16 #-}
+  toWord32 = dropDown . (max 0)
+  {-# INLINE toWord32 #-}
+  toWord64 = fromIntegral . (max 0)
+  {-# INLINE toWord64 #-}
+  toFloat = squashTo1 . (max 0)
+  {-# INLINE toFloat #-}
+  toDouble = squashTo1 . (max 0)
+  {-# INLINE toDouble #-}
+  fromDouble = stretch . clamp01
+  {-# INLINE fromDouble #-}
+
+
+-- | Values between @[0.0, 1.0]@
+instance Elevator Float where
+  toWord8 = stretch . clamp01
+  {-# INLINE toWord8 #-}
+  toWord16 = stretch . clamp01
+  {-# INLINE toWord16 #-}
+  toWord32 = stretch . clamp01
+  {-# INLINE toWord32 #-}
+  toWord64 = stretch . clamp01
+  {-# INLINE toWord64 #-}
+  toFloat = id
+  {-# INLINE toFloat #-}
+  toDouble = float2Double
+  {-# INLINE toDouble #-}
+  fromDouble = toFloat
+  {-# INLINE fromDouble #-}
+
+
+-- | Values between @[0.0, 1.0]@
+instance Elevator Double where
+  toWord8 = stretch . clamp01
+  {-# INLINE toWord8 #-}
+  toWord16 = stretch . clamp01
+  {-# INLINE toWord16 #-}
+  toWord32 = stretch . clamp01
+  {-# INLINE toWord32 #-}
+  toWord64 = stretch . clamp01
+  {-# INLINE toWord64 #-}
+  toFloat = double2Float
+  {-# INLINE toFloat #-}
+  toDouble = id
+  {-# INLINE toDouble #-}
+  fromDouble = id
+  {-# INLINE fromDouble #-}
+
+
+-- | Discards imaginary part and changes precision of real part.
+instance (Num e, Elevator e, RealFloat e) => Elevator (C.Complex e) where
+  toWord8 = toWord8 . C.realPart
+  {-# INLINE toWord8 #-}
+  toWord16 = toWord16 . C.realPart
+  {-# INLINE toWord16 #-}
+  toWord32 = toWord32 . C.realPart
+  {-# INLINE toWord32 #-}
+  toWord64 = toWord64 . C.realPart
+  {-# INLINE toWord64 #-}
+  toFloat = toFloat . C.realPart
+  {-# INLINE toFloat #-}
+  toDouble = toDouble . C.realPart
+  {-# INLINE toDouble #-}
+  fromDouble = (C.:+ 0) . fromDouble
+  {-# INLINE fromDouble #-}
+
+{-------------------------------------------------------------COLORSPACE-----------------------------------------------------------------}
+
+data family Pixel cs e :: *
+
+
+class (Eq cs, Enum cs, Show cs, Bounded cs, Typeable cs,
+      Eq (Pixel cs e), VU.Unbox (Components cs e), Elevator e)
+      => ColorSpace cs e where
+
+  type Components cs e
+
+  -- | Convert a Pixel to a representation suitable for storage as an unboxed
+  -- element, usually a tuple of channels.
+  toComponents :: Pixel cs e -> Components cs e
+
+  -- | Convert from an elemnt representation back to a Pixel.
+  fromComponents :: Components cs e -> Pixel cs e
+
+  -- | Construt a Pixel by replicating the same value across all of the components.
+  promote :: e -> Pixel cs e
+
+  -- | Retrieve Pixel's component value
+  getPxC :: Pixel cs e -> cs -> e
+
+  -- | Set Pixel's component value
+  setPxC :: Pixel cs e -> cs -> e -> Pixel cs e
+
+  -- | Map a channel aware function over all Pixel's components.
+  mapPxC :: (cs -> e -> e) -> Pixel cs e -> Pixel cs e
+
+  -- | Map a function over all Pixel's componenets.
+  liftPx :: (e -> e) -> Pixel cs e -> Pixel cs e
+
+  -- | Zip two Pixels with a function.
+  liftPx2 :: (e -> e -> e) -> Pixel cs e -> Pixel cs e -> Pixel cs e
+
+  -- | Left fold on two pixels a the same time.
+  foldlPx2 :: (b -> e -> e -> b) -> b -> Pixel cs e -> Pixel cs e -> b
+
+  -- | Right fold over all Pixel's components.
+  foldrPx :: (e -> b -> b) -> b -> Pixel cs e -> b
+  foldrPx f !z0 !xs = foldlPx f' id xs z0
+      where f' k x !z = k $! f x z
+
+  -- | Left strict fold over all Pixel's components.
+  foldlPx :: (b -> e -> b) -> b -> Pixel cs e -> b
+  foldlPx f !z0 !xs = foldrPx f' id xs z0
+      where f' x k !z = k $! f z x
+
+  foldl1Px :: (e -> e -> e) -> Pixel cs e -> e
+  foldl1Px f !xs = fromMaybe (error "foldl1Px: empty Pixel")
+                  (foldlPx mf Nothing xs)
+      where
+        mf m !y = Just (case m of
+                           Nothing -> y
+                           Just x  -> f x y)
+  toListPx :: Pixel cs e -> [e]
+  toListPx !px = foldr' f [] (enumFrom (toEnum 0))
+    where f !cs !ls = getPxC px cs:ls
+
+
+
+-- | A color space that supports transparency.
+class (ColorSpace (Opaque cs) e, ColorSpace cs e) => AlphaSpace cs e where
+  -- | A corresponding opaque version of this color space.
+  type Opaque cs
+
+  -- | Get an alpha channel of a transparant pixel.
+  getAlpha :: Pixel cs e -> e
+
+  -- | Add an alpha channel to an opaque pixel.
+  --
+  -- @ addAlpha 0 (PixelHSI 1 2 3) == PixelHSIA 1 2 3 0 @
+  addAlpha :: e -> Pixel (Opaque cs) e -> Pixel cs e
+
+  -- | Convert a transparent pixel to an opaque one by dropping the alpha
+  -- channel.
+  --
+  -- @ dropAlpha (PixelRGBA 1 2 3 4) == PixelRGB 1 2 3 @
+  --
+  dropAlpha :: Pixel cs e -> Pixel (Opaque cs) e
+
+
+-- | Base array like representation for an image.
+class (Typeable arr, ColorSpace cs e, SuperClass arr cs e) =>
+      BaseArray arr cs e where
+
+  -- | Required array specific constraints for an array element.
+  type SuperClass arr cs e :: Constraint
+
+  -- | Underlying image representation.
+  data Image arr cs e
+
+  -- | Get dimensions of an image.
+  --
+  -- >>> frog <- readImageRGB VU "images/frog.jpg"
+  -- >>> frog
+  -- <Image VectorUnboxed RGB (Double): 200x320>
+  -- >>> dims frog
+  -- (200,320)
+  --
+  dims :: Image arr cs e -> (Int, Int)
 
 class (VG.Vector (Vector arr) (Pixel cs e),
        MArray (Manifest arr) cs e, BaseArray arr cs e) => Array arr cs e where
@@ -511,7 +766,7 @@ handleBorderIndex ~border !(m, n) getPx !(i, j) =
 -- True
 --
 index :: MArray arr cs e => Image arr cs e -> (Int, Int) -> Pixel cs e
-index !img !ix = borderIndex (error $ show img ++ " - Index out of bounds: " ++ show ix) img ix
+index !img !ix = borderIndex (error $ show img Prelude.++ " - Index out of bounds: " Prelude.++ show ix) img ix
 {-# INLINE index #-}
 
 
@@ -560,7 +815,7 @@ checkDims :: String -> (Int, Int) -> (Int, Int)
 checkDims err !sz@(m, n)
   | m <= 0 || n <= 0 =
     error $
-    show err ++ ": dimensions are expected to be positive: " ++ show sz
+    show err Prelude.++ ": dimensions are expected to be positive: " Prelude.++ show sz
   | otherwise = sz
 {-# INLINE checkDims #-}
 
@@ -633,22 +888,22 @@ instance Array arr cs e => Eq (Image arr cs e) where
   {-# INLINE (==) #-}
 
 instance Array arr cs e => Num (Image arr cs e) where
-  (+)         = zipWith (+)
+  (+)         = GAUSSIAN.zipWith (+)
   {-# INLINE (+) #-}
-  (-)         = zipWith (-)
+  (-)         = GAUSSIAN.zipWith (-)
   {-# INLINE (-) #-}
-  (*)         = zipWith (*)
+  (*)         = GAUSSIAN.zipWith (*)
   {-# INLINE (*) #-}
-  abs         = map abs
+  abs         = GAUSSIAN.map abs
   {-# INLINE abs #-}
-  signum      = map signum
+  signum      = GAUSSIAN.map signum
   {-# INLINE signum #-}
   fromInteger = scalar . fromInteger
   {-# INLINE fromInteger #-}
 
 instance (Fractional (Pixel cs e), Array arr cs e) =>
          Fractional (Image arr cs e) where
-  (/)          = zipWith (/)
+  (/)          = GAUSSIAN.zipWith (/)
   {-# INLINE (/) #-}
   fromRational = scalar . fromRational
   {-# INLINE fromRational #-}
@@ -658,29 +913,29 @@ instance (Floating (Pixel cs e), Array arr cs e) =>
          Floating (Image arr cs e) where
   pi    = scalar pi
   {-# INLINE pi #-}
-  exp   = map exp
+  exp   = GAUSSIAN.map exp
   {-# INLINE exp #-}
-  log   = map log
+  log   = GAUSSIAN.map log
   {-# INLINE log #-}
-  sin   = map sin
+  sin   = GAUSSIAN.map sin
   {-# INLINE sin #-}
-  cos   = map cos
+  cos   = GAUSSIAN.map cos
   {-# INLINE cos #-}
-  asin  = map asin
+  asin  = GAUSSIAN.map asin
   {-# INLINE asin #-}
-  atan  = map atan
+  atan  = GAUSSIAN.map atan
   {-# INLINE atan #-}
-  acos  = map acos
+  acos  = GAUSSIAN.map acos
   {-# INLINE acos #-}
-  sinh  = map sinh
+  sinh  = GAUSSIAN.map sinh
   {-# INLINE sinh #-}
-  cosh  = map cosh
+  cosh  = GAUSSIAN.map cosh
   {-# INLINE cosh #-}
-  asinh = map asinh
+  asinh = GAUSSIAN.map asinh
   {-# INLINE asinh #-}
-  atanh = map atanh
+  atanh = GAUSSIAN.map atanh
   {-# INLINE atanh #-}
-  acosh = map acosh
+  acosh = GAUSSIAN.map acosh
   {-# INLINE acosh #-}
 
 
@@ -692,22 +947,23 @@ instance MArray arr cs e => NFData (Image arr cs e) where
 instance BaseArray arr cs e =>
          Show (Image arr cs e) where
   show (dims -> (m, n)) =
-    "<Image " ++
-    showsTypeRep (typeRep (Proxy :: Proxy arr)) " " ++
-    showsTypeRep (typeRep (Proxy :: Proxy cs)) " (" ++
-    showsTypeRep (typeRep (Proxy :: Proxy e)) "): " ++
-     show m ++ "x" ++ show n ++ ">"
+    "<Image " Prelude.++
+    showsTypeRep (typeRep (Proxy :: Proxy arr)) " " Prelude.++
+    showsTypeRep (typeRep (Proxy :: Proxy cs)) " (" Prelude.++
+    showsTypeRep (typeRep (Proxy :: Proxy e)) "): " Prelude.++
+     show m Prelude.++ "x" Prelude.++ show n Prelude.++ ">"
 
 
 instance MArray arr cs e =>
          Show (MImage st arr cs e) where
   show (mdims -> (m, n)) =
-    "<MutableImage " ++
-    showsTypeRep (typeRep (Proxy :: Proxy arr)) " " ++
-    showsTypeRep (typeRep (Proxy :: Proxy cs)) " (" ++
-    showsTypeRep (typeRep (Proxy :: Proxy e)) "): " ++
-     show m ++ "x" ++ show n ++ ">"
+    "<MutableImage " Prelude.++
+    showsTypeRep (typeRep (Proxy :: Proxy arr)) " " Prelude.++
+    showsTypeRep (typeRep (Proxy :: Proxy cs)) " (" Prelude.++
+    showsTypeRep (typeRep (Proxy :: Proxy e)) "): " Prelude.++
+     show m Prelude.++ "x" Prelude.++ show n Prelude.++ ">"
 
+{------------------------------------------------------GUASSIAN FUNCTION-----------------------------------------------------------}
 
 -- | Filter that can be applied to an image using `applyFilter`.
 --
@@ -735,9 +991,9 @@ gaussianLowPass !r !sigma border =
   Filter (correlate border gV' . correlate border gV)
   where
     !gV = compute $ (gauss / scalar weight)
-    !gV' = compute $ transpose gV
+    !gV' = compute $ GAUSSIAN.transpose gV
     !gauss = makeImage (1, n) getPx
-    !weight = I.fold (+) 0 gauss
+    !weight = GAUSSIAN.fold (+) 0 gauss
     !n = 2 * r + 1
     !sigma2sq = 2 * sigma ^ (2 :: Int)
     getPx (_, j) = promote $ exp (fromIntegral (-((j - r) ^ (2 :: Int))) / sigma2sq)
