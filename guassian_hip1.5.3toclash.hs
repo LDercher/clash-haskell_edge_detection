@@ -11,11 +11,12 @@ import           Data.Typeable                     (Typeable, showsTypeRep,
 import Prelude hiding (and, map, zipWith, sum, product)
 -- #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid (Monoid)
-import Data.Foldable (Foldable(foldMap))
+import Data.Maybe
+import Data.Foldable --(Foldable(foldMap))
 -- #endif
 import GHC.Exts (Constraint)
 import Data.Typeable --(Typeable, showsTypeRep, typeOf, Proxy)
-import Control.DeepSeq (NFData(rnf))
+import Control.DeepSeq --(NFData(rnf))
 import Data.Word
 import           Control.Monad.ST
 import Control.Applicative
