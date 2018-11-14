@@ -1,0 +1,2 @@
+Manifest {manifestHash = (7844507105005189733,Nothing), portInNames = ["img"], portInTypes = ["std_logic"], portOutNames = ["result"], portOutTypes = ["std_logic"], componentNames = ["gaussian_topentity"]}
+

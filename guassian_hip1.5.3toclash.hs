@@ -1030,4 +1030,6 @@ gaussianBlur :: (Array arr cs e, Array arr X e, Floating e, RealFrac e) =>
 gaussianBlur !sigma = gaussianLowPass (ceiling (2*sigma)) sigma Edge
 {-# INLINE gaussianBlur #-}
 
+topEntity :: Bit -> Bit
+topEntity img = 1
 
