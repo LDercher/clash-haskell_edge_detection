@@ -17,14 +17,25 @@ import Data.Foldable --(Foldable(foldMap))
 import GHC.Exts (Constraint)
 import Data.Typeable --(Typeable, showsTypeRep, typeOf, Proxy)
 import Control.DeepSeq --(NFData(rnf))
+import GHC.Float
 import Data.Word
 import           Control.Monad.ST
 import Control.Applicative
 import Control.Monad.Primitive (PrimMonad (..))
 import qualified Data.Complex  as C
+
 --import           Graphics.Image.Interface              as I
 --import           Graphics.Image.Processing.Convolution
 --import           Graphics.Image.ColorSpace               (X)
+
+-- | Very efficient loop
+loop :: t -> (t -> Bool) -> (t -> t) -> a -> (t -> a -> a) -> a
+loop !init' condition increment !initAcc f = go init' initAcc where
+  go !step !acc =
+    case condition step of
+      False -> acc
+      True  -> go (increment step) (f step acc)
+{-# INLINE loop #-}
 
 -- | Correlate an image with a kernel. Border resolution technique is required.
 correlate :: (Array arr X e, Array arr cs e)
@@ -52,6 +63,10 @@ correlate !border !kernel !img =
 {-# INLINE correlate #-}
 
 data X = X deriving (Eq, Enum, Bounded, Show, Typeable)
+
+newtype instance Pixel X e = PixelX { getX :: e } deriving (Ord, Eq)
+
+
 
 class (Eq e, Num e, Typeable e, VU.Unbox e) => Elevator e where
 
