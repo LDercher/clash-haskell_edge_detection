@@ -1030,6 +1030,9 @@ gaussianBlur :: (Array arr cs e, Array arr X e, Floating e, RealFrac e) =>
 gaussianBlur !sigma = gaussianLowPass (ceiling (2*sigma)) sigma Edge
 {-# INLINE gaussianBlur #-}
 
+--can we make an insatnce of array a clahs vect?
+-- take vhdl chunk of memory tanslate to clash to see how that works
+
 topEntity :: Bit -> Bit
 topEntity img = 1
 
