@@ -7,6 +7,8 @@ import           Data.Typeable                     (Typeable, showsTypeRep,
                                                     typeRep)
 
 --https://hackage.haskell.org/package/hip-1.0.1/candidate/docs/src/Graphics-Image-Interface.html#Elevator
+
+
                                                     
 import Prelude hiding (and, map, zipWith, sum, product)
 -- #if !MIN_VERSION_base(4,8,0)
@@ -27,6 +29,7 @@ import qualified Data.Complex  as C
 --import           Graphics.Image.Interface              as I
 --import           Graphics.Image.Processing.Convolution
 --import           Graphics.Image.ColorSpace               (X)
+
 
 -- | Very efficient loop
 loop :: t -> (t -> Bool) -> (t -> t) -> a -> (t -> a -> a) -> a
@@ -1024,15 +1027,15 @@ gaussianLowPass !r !sigma border =
 -- `gaussianLowPass` can be used instead.
 --
 -- @since 1.5.3
-gaussianBlur :: (Array arr cs e, Array arr X e, Floating e, RealFrac e) =>
+topEntity :: (Array arr cs e, Array arr X e, Floating e, RealFrac e) =>
                 e -- ^ Sigma
              -> Filter arr cs e
-gaussianBlur !sigma = gaussianLowPass (ceiling (2*sigma)) sigma Edge
-{-# INLINE gaussianBlur #-}
+topEntity !sigma = gaussianLowPass (ceiling (2*sigma)) sigma Edge
+--{-# INLINE gaussianBlur #-}
 
 --can we make an insatnce of array a clahs vect?
 -- take vhdl chunk of memory tanslate to clash to see how that works
 
-topEntity :: Bit -> Bit
-topEntity img = 1
+--topEntity :: Bit -> Bit
+--topEntity img = 1
 
