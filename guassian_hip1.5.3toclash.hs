@@ -95,21 +95,7 @@ class (Eq e, Num e, Typeable e, VU.Unbox e) => Elevator e where
   fromDouble :: Double -> e
 
 
--- | Lower the precision
-dropDown :: forall a b. (Integral a, Bounded a, Integral b, Bounded b) => a -> b
-dropDown !e = fromIntegral $ fromIntegral e `div` ((maxBound :: a) `div`
-                                                   fromIntegral (maxBound :: b))
-{-# INLINE dropDown #-}
 
--- | Increase the precision
-raiseUp :: forall a b. (Integral a, Bounded a, Integral b, Bounded b) => a -> b
-raiseUp !e = fromIntegral e * ((maxBound :: b) `div` fromIntegral (maxBound :: a))
-{-# INLINE raiseUp #-}
-
--- | Convert to fractional with value less than or equal to 1.
-squashTo1 :: forall a b. (Fractional b, Integral a, Bounded a) => a -> b
-squashTo1 !e = fromIntegral e / fromIntegral (maxBound :: a)
-{-# INLINE squashTo1 #-}
 
 -- | Convert to integral streaching it's value up to a maximum value.
 stretch :: forall a b. (RealFrac a, Floating a, Integral b, Bounded b) => a -> b
@@ -122,201 +108,6 @@ clamp01 :: (Ord a, Floating a) => a -> a
 clamp01 !x = min (max 0 x) 1
 {-# INLINE clamp01 #-}
 
-
--- | Values between @[0, 255]]@
-instance Elevator Word8 where
-  toWord8 = id
-  {-# INLINE toWord8 #-}
-  toWord16 = raiseUp
-  {-# INLINE toWord16 #-}
-  toWord32 = raiseUp
-  {-# INLINE toWord32 #-}
-  toWord64 = raiseUp
-  {-# INLINE toWord64 #-}
-  toFloat = squashTo1
-  {-# INLINE toFloat #-}
-  toDouble = squashTo1
-  {-# INLINE toDouble #-}
-  fromDouble = toWord8
-  {-# INLINE fromDouble #-}
-
-
--- | Values between @[0, 65535]]@
-instance Elevator Word16 where
-  toWord8 = dropDown
-  {-# INLINE toWord8 #-}
-  toWord16 = id
-  {-# INLINE toWord16 #-}
-  toWord32 = raiseUp
-  {-# INLINE toWord32 #-}
-  toWord64 = raiseUp
-  {-# INLINE toWord64 #-}
-  toFloat = squashTo1
-  {-# INLINE toFloat #-}
-  toDouble = squashTo1
-  {-# INLINE toDouble #-}
-  fromDouble = toWord16
-  {-# INLINE fromDouble #-}
-
-
--- | Values between @[0, 4294967295]@
-instance Elevator Word32 where
-  toWord8 = dropDown
-  {-# INLINE toWord8 #-}
-  toWord16 = dropDown
-  {-# INLINE toWord16 #-}
-  toWord32 = id
-  {-# INLINE toWord32 #-}
-  toWord64 = raiseUp
-  {-# INLINE toWord64 #-}
-  toFloat = squashTo1
-  {-# INLINE toFloat #-}
-  toDouble = squashTo1
-  {-# INLINE toDouble #-}
-  fromDouble = toWord32
-  {-# INLINE fromDouble #-}
-
-
--- | Values between @[0, 18446744073709551615]@
-instance Elevator Word64 where
-  toWord8 = dropDown
-  {-# INLINE toWord8 #-}
-  toWord16 = dropDown
-  {-# INLINE toWord16 #-}
-  toWord32 = dropDown
-  {-# INLINE toWord32 #-}
-  toWord64 = id
-  {-# INLINE toWord64 #-}
-  toFloat = squashTo1
-  {-# INLINE toFloat #-}
-  toDouble = squashTo1
-  {-# INLINE toDouble #-}
-  fromDouble = toWord64
-  {-# INLINE fromDouble #-}
-
--- | Values between @[0, 18446744073709551615]@ on 64bit
-instance Elevator Word where
-  toWord8 = dropDown
-  {-# INLINE toWord8 #-}
-  toWord16 = dropDown
-  {-# INLINE toWord16 #-}
-  toWord32 = dropDown
-  {-# INLINE toWord32 #-}
-  toWord64 = fromIntegral
-  {-# INLINE toWord64 #-}
-  toFloat = squashTo1
-  {-# INLINE toFloat #-}
-  toDouble = squashTo1
-  {-# INLINE toDouble #-}
-  fromDouble = stretch . clamp01
-  {-# INLINE fromDouble #-}
-{--
- | Values between @[0, 127]@
-instance Elevator Int8 where
-  toWord8 = fromIntegral . (max 0)
-  {-# INLINE toWord8 #-}
- -- toWord16 = raiseUp . (max 0)
- -- {-# INLINE toWord16 #-}
- -- toWord32 = raiseUp . (max 0)
- -- {-# INLINE toWord32 #-}
- -- toWord64 = raiseUp . (max 0)
- -- {-# INLINE toWord64 #-}
- -- toFloat = squashTo1 . (max 0)
- -- {-# INLINE toFloat #-}
- -- toDouble = squashTo1 . (max 0)
- -- {-# INLINE toDouble #-}
- -- fromDouble = stretch . clamp01
- -- {-# INLINE fromDouble #-}
-
-
--- | Values between @[0, 32767]@
---instance Elevator Int16 where
---  toWord8 = dropDown . (max 0)
---  {-# INLINE toWord8 #-}
--- toWord16 = fromIntegral . (max 0)
---{-# INLINE toWord16 #-}
---  toWord32 = raiseUp . (max 0)
---  {-# INLINE toWord32 #-}
---  toWord64 = raiseUp . (max 0)
---  {-# INLINE toWord64 #-}
---  toFloat = squashTo1 . (max 0)
---  {-# INLINE toFloat #-}
---  toDouble = squashTo1 . (max 0)
---  {-# INLINE toDouble #-}
---  fromDouble = stretch . clamp01
---  {-# INLINE fromDouble #-}
-
-
--- | Values between @[0, 2147483647]@-
---instance Elevator Int32 where
---  toWord8 = dropDown . (max 0)
---  {-# INLINE toWord8 #-}
---  toWord16 = dropDown . (max 0)
---  {-# INLINE toWord16 #-}
---  toWord32 = fromIntegral . (max 0)
---  {-# INLINE toWord32 #-}
---  toWord64 = raiseUp . (max 0)
---  {-# INLINE toWord64 #-}
---  toFloat = squashTo1 . (max 0)
---  {-# INLINE toFloat #-}
---  toDouble = squashTo1 . (max 0)
---  {-# INLINE toDouble #-}
--- fromDouble = stretch . clamp01
---  {-# INLINE fromDouble #-}
-
-
--- | Values between @[0, 9223372036854775807]@
---instance Elevator Int64 where
---  toWord8 = dropDown . (max 0)
---  {-# INLINE toWord8 #-}
---  toWord16 = dropDown . (max 0)
---  {-# INLINE toWord16 #-}
---  toWord32 = dropDown . (max 0)
---  {-# INLINE toWord32 #-}
---  toWord64 = fromIntegral . (max 0)
---  {-# INLINE toWord64 #-}
---  toFloat = squashTo1 . (max 0)
---  {-# INLINE toFloat #-}
---  toDouble = squashTo1 . (max 0)
---  {-# INLINE toDouble #-}
---  fromDouble = stretch . clamp01
---  {-# INLINE fromDouble #-}
- --}
-
--- | Values between @[0, 9223372036854775807]@ on 64bit
-instance Elevator Int where
-  toWord8 = dropDown . (max 0)
-  {-# INLINE toWord8 #-}
-  toWord16 = dropDown . (max 0)
-  {-# INLINE toWord16 #-}
-  toWord32 = dropDown . (max 0)
-  {-# INLINE toWord32 #-}
-  toWord64 = fromIntegral . (max 0)
-  {-# INLINE toWord64 #-}
-  toFloat = squashTo1 . (max 0)
-  {-# INLINE toFloat #-}
-  toDouble = squashTo1 . (max 0)
-  {-# INLINE toDouble #-}
-  fromDouble = stretch . clamp01
-  {-# INLINE fromDouble #-}
-
-
--- | Values between @[0.0, 1.0]@
-instance Elevator Float where
-  toWord8 = stretch . clamp01
-  {-# INLINE toWord8 #-}
-  toWord16 = stretch . clamp01
-  {-# INLINE toWord16 #-}
-  toWord32 = stretch . clamp01
-  {-# INLINE toWord32 #-}
-  toWord64 = stretch . clamp01
-  {-# INLINE toWord64 #-}
-  toFloat = id
-  {-# INLINE toFloat #-}
-  toDouble = float2Double
-  {-# INLINE toDouble #-}
-  fromDouble = toFloat
-  {-# INLINE fromDouble #-}
 
 
 -- | Values between @[0.0, 1.0]@
@@ -337,22 +128,6 @@ instance Elevator Double where
   {-# INLINE fromDouble #-}
 
 
--- | Discards imaginary part and changes precision of real part.
-instance (Num e, Elevator e, RealFloat e) => Elevator (C.Complex e) where
-  toWord8 = toWord8 . C.realPart
-  {-# INLINE toWord8 #-}
-  toWord16 = toWord16 . C.realPart
-  {-# INLINE toWord16 #-}
-  toWord32 = toWord32 . C.realPart
-  {-# INLINE toWord32 #-}
-  toWord64 = toWord64 . C.realPart
-  {-# INLINE toWord64 #-}
-  toFloat = toFloat . C.realPart
-  {-# INLINE toFloat #-}
-  toDouble = toDouble . C.realPart
-  {-# INLINE toDouble #-}
-  fromDouble = (C.:+ 0) . fromDouble
-  {-# INLINE fromDouble #-}
 
 {-------------------------------------------------------------COLORSPACE-----------------------------------------------------------------}
 
@@ -681,26 +456,8 @@ class BaseArray arr cs e => MArray arr cs e  where
           MImage (PrimState m) arr cs e -> (Int, Int) -> (Int, Int) -> m ()
 
 
--- | Run a stateful monadic computation that generates an image.
-createImage
-  :: MArray arr cs e
-  => (forall s. ST s (MImage s arr cs e)) -> Image arr cs e
-createImage create = runST (create >>= freeze)
 
 
--- | Exchange the underlying array representation of an image.
-exchange :: (Array arr' cs e, Array arr cs e) =>
-            arr -- ^ New representation of an image.
-         -> Image arr' cs e -- ^ Source image.
-         -> Image arr cs e
-exchange _ img@(dims -> (1, 1)) = scalar $ index00 img
-exchange _ img = fromVector (dims img) $ VG.convert $ toVector img
-{-# INLINE exchange #-}
-
-
---{-# RULES
---"exchange/id" forall arr. exchange arr = id
--- #-}
 
 
 -- | Approach to be used near the borders during various transformations.
@@ -778,22 +535,7 @@ handleBorderIndex ~border !(m, n) getPx !(i, j) =
 {-# INLINE handleBorderIndex #-}
 
 
--- | Get a pixel at @i@-th and @j@-th location.
---
--- >>> let grad_gray = makeImage (200, 200) (\(i, j) -> PixelY $ fromIntegral (i*j)) / (200*200)
--- >>> index grad_gray (20, 30) == PixelY ((20*30) / (200*200))
--- True
---
-index :: MArray arr cs e => Image arr cs e -> (Int, Int) -> Pixel cs e
-index !img !ix = borderIndex (error $ show img Prelude.++ " - Index out of bounds: " Prelude.++ show ix) img ix
-{-# INLINE index #-}
 
-
--- | Image indexing function that returns a default pixel if index is out of bounds.
-defaultIndex :: MArray arr cs e =>
-                Pixel cs e -> Image arr cs e -> (Int, Int) -> Pixel cs e
-defaultIndex !px !img = handleBorderIndex (Fill px) (dims img) (index img)
-{-# INLINE defaultIndex #-}
 
 
 -- | Image indexing function that uses a special border resolutions strategy for
@@ -803,40 +545,6 @@ borderIndex :: MArray arr cs e =>
 borderIndex ~atBorder !img = handleBorderIndex atBorder (dims img) (unsafeIndex img)
 {-# INLINE borderIndex #-}
 
-
--- | Image indexing function that returns @'Nothing'@ if index is out of bounds,
--- @'Just' px@ otherwise.
-maybeIndex :: MArray arr cs e =>
-              Image arr cs e -> (Int, Int) -> Maybe (Pixel cs e)
-maybeIndex !img@(dims -> (m, n)) !(i, j) =
-  if i >= 0 && j >= 0 && i < m && j < n then Just $ unsafeIndex img (i, j) else Nothing
-{-# INLINE maybeIndex #-}
-
-
--- | 2D to a flat vector index conversion.
---
--- __Note__: There is an implicit assumption that @j < n@
-fromIx :: Int -- ^ @n@ columns
-       -> (Int, Int) -- ^ @(i, j)@ row, column index
-       -> Int -- ^ Flat vector index
-fromIx !n !(i, j) = n * i + j
-{-# INLINE fromIx #-}
-
-
--- | Flat vector to 2D index conversion.
-toIx :: Int -- ^ @n@ columns
-     -> Int -- ^ Flat vector index
-     -> (Int, Int) -- ^ @(i, j)@ row, column index
-toIx !n !k = divMod k n
-{-# INLINE toIx #-}
-
-checkDims :: String -> (Int, Int) -> (Int, Int)
-checkDims err !sz@(m, n)
-  | m <= 0 || n <= 0 =
-    error $
-    show err Prelude.++ ": dimensions are expected to be positive: " Prelude.++ show sz
-  | otherwise = sz
-{-# INLINE checkDims #-}
 
 
 instance ColorSpace cs e => Num (Pixel cs e) where
@@ -863,48 +571,7 @@ instance (ColorSpace cs e, Fractional e) => Fractional (Pixel cs e) where
   {-# INLINE fromRational #-}
 
 
-instance (ColorSpace cs e, Floating e) => Floating (Pixel cs e) where
-  pi      = promote pi
-  {-# INLINE pi #-}
-  exp     = liftPx exp
-  {-# INLINE exp #-}
-  log     = liftPx log
-  {-# INLINE log #-}
-  sin     = liftPx sin
-  {-# INLINE sin #-}
-  cos     = liftPx cos
-  {-# INLINE cos #-}
-  asin    = liftPx asin
-  {-# INLINE asin #-}
-  atan    = liftPx atan
-  {-# INLINE atan #-}
-  acos    = liftPx acos
-  {-# INLINE acos #-}
-  sinh    = liftPx sinh
-  {-# INLINE sinh #-}
-  cosh    = liftPx cosh
-  {-# INLINE cosh #-}
-  asinh   = liftPx asinh
-  {-# INLINE asinh #-}
-  atanh   = liftPx atanh
-  {-# INLINE atanh #-}
-  acosh   = liftPx acosh
-  {-# INLINE acosh #-}
 
-instance (ColorSpace cs e, Bounded e) => Bounded (Pixel cs e) where
-  maxBound = promote maxBound
-  {-# INLINE maxBound #-}
-  minBound = promote minBound
-  {-# INLINE minBound #-}
-
-instance (Foldable (Pixel cs), NFData e) => NFData (Pixel cs e) where
-
-  rnf = foldr' deepseq ()
-  {-# INLINE rnf #-}
-
-instance Array arr cs e => Eq (Image arr cs e) where
-  (==) = eq
-  {-# INLINE (==) #-}
 
 instance Array arr cs e => Num (Image arr cs e) where
   (+)         = GAUSSIAN.zipWith (+)
@@ -928,36 +595,6 @@ instance (Fractional (Pixel cs e), Array arr cs e) =>
   {-# INLINE fromRational #-}
 
 
-instance (Floating (Pixel cs e), Array arr cs e) =>
-         Floating (Image arr cs e) where
-  pi    = scalar pi
-  {-# INLINE pi #-}
-  exp   = GAUSSIAN.map exp
-  {-# INLINE exp #-}
-  log   = GAUSSIAN.map log
-  {-# INLINE log #-}
-  sin   = GAUSSIAN.map sin
-  {-# INLINE sin #-}
-  cos   = GAUSSIAN.map cos
-  {-# INLINE cos #-}
-  asin  = GAUSSIAN.map asin
-  {-# INLINE asin #-}
-  atan  = GAUSSIAN.map atan
-  {-# INLINE atan #-}
-  acos  = GAUSSIAN.map acos
-  {-# INLINE acos #-}
-  sinh  = GAUSSIAN.map sinh
-  {-# INLINE sinh #-}
-  cosh  = GAUSSIAN.map cosh
-  {-# INLINE cosh #-}
-  asinh = GAUSSIAN.map asinh
-  {-# INLINE asinh #-}
-  atanh = GAUSSIAN.map atanh
-  {-# INLINE atanh #-}
-  acosh = GAUSSIAN.map acosh
-  {-# INLINE acosh #-}
-
-
 instance MArray arr cs e => NFData (Image arr cs e) where
   rnf img = img `deepSeqImage` ()
   {-# INLINE rnf #-}
@@ -973,14 +610,14 @@ instance BaseArray arr cs e =>
      show m Prelude.++ "x" Prelude.++ show n Prelude.++ ">"
 
 
-instance MArray arr cs e =>
+{--instance MArray arr cs e =>
          Show (MImage st arr cs e) where
   show (mdims -> (m, n)) =
     "<MutableImage " Prelude.++
     showsTypeRep (typeRep (Proxy :: Proxy arr)) " " Prelude.++
     showsTypeRep (typeRep (Proxy :: Proxy cs)) " (" Prelude.++
     showsTypeRep (typeRep (Proxy :: Proxy e)) "): " Prelude.++
-     show m Prelude.++ "x" Prelude.++ show n Prelude.++ ">"
+     show m Prelude.++ "x" Prelude.++ show n Prelude.++ ">" --}
 
 {------------------------------------------------------GUASSIAN FUNCTION-----------------------------------------------------------}
 
@@ -992,9 +629,9 @@ data Filter arr cs e = Filter
   }
 
 -- | Used to specify direction for some filters.
-data Direction
+{--data Direction
   = Vertical
-  | Horizontal
+  | Horizontal --}
 
 
 
