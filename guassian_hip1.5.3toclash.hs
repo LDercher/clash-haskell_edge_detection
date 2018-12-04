@@ -340,12 +340,6 @@ instance (Fractional (Pixel cs e), Array arr cs e) =>
   {-# INLINE fromRational #-}
 
 
-{-
-instance MArray arr cs e => NFData (Image arr cs e) where
-  rnf img = img `deepSeqImage` ()
-  {-# INLINE rnf #-}
-  -}
-
 
 instance BaseArray arr cs e =>
          Show (Image arr cs e) where
