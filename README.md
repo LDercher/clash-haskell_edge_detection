@@ -1,7 +1,6 @@
 # clash-haskell_edge_detection
 
-goals:
-	1. Take existing haskell implementation of edge detection alg and implement in clash.
-	2. benchmark performance and test output vrs. VHDL impl not generated in Haskell. 
+The purpose of this project is to take an existing implementation of a image edge detection algorithm in Haskell and convert it to code that can be compiled by the clash compiler (see https://clash-lang.org/ for details) 
 	
-note: compile with clash -XViewPatterns -XUndecidableInstances -XBangPatterns -XUndecidableSuperClasses -XMultiParamTypeClasses -XRankNTypes guassian_hip1.5.3toclash.hs
+note: compile with 
+clash -XViewPatterns -XUndecidableInstances -XBangPatterns -XUndecidableSuperClasses -XMultiParamTypeClasses -XRankNTypes guassian_hip1.5.3toclash.hs
