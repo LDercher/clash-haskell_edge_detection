@@ -1,8 +1,11 @@
+--- synopsis: implementation of guassian blur function from Haskell Graphics.GD Haskell module in clash (Haskell->VHDL)
+--- author: Luke Dercher
+--- citation: Haskell Graphics.HIP version 1.5.3 library 
+--- last modified: 12/04/2018
+
+
 module GAUSSIAN where
 import Clash.Prelude
-import qualified Data.Vector.Generic               as VG
-import qualified Data.Vector.Unboxed               as VU
---import           Graphics.Image.Interface          as I
 import           Data.Typeable                     (Typeable, showsTypeRep,
                                                     typeRep)
 
@@ -14,16 +17,13 @@ import Prelude hiding (and, map, zipWith, sum, product)
 -- #if !MIN_VERSION_base(4,8,0)
 import Data.Monoid (Monoid)
 import Data.Maybe
-import Data.Foldable --(Foldable(foldMap))
+import Data.Foldable
 -- #endif
 import GHC.Exts (Constraint)
-import Data.Typeable --(Typeable, showsTypeRep, typeOf, Proxy)
-import Control.DeepSeq --(NFData(rnf))
+import Data.Typeable
 import GHC.Float
 import Data.Word
-import           Control.Monad.ST
 import Control.Applicative
-import Control.Monad.Primitive (PrimMonad (..))
 import qualified Data.Complex  as C
 
 
@@ -66,36 +66,6 @@ data X = X deriving (Eq, Enum, Bounded, Show, Typeable)
 
 newtype instance Pixel X e = PixelX { getX :: e } deriving (Ord, Eq)
 
-
--- *** CAN ELEVATOR BE REDUCED TO NOTHING OR REMOVED ENTIRELY ??*****
--- Superclass to colorspace 
-
-class (Eq e, Num e, Typeable e, VU.Unbox e) => Elevator e where
-
-  -- | Values are scaled to @[0, 255]@ range.
-  --toWord8 :: e -> Word8
-
-  -- | Values are scaled to @[0, 65535]@ range.
- -- toWord16 :: e -> Word16
-
-  -- | Values are scaled to @[0, 4294967295]@ range.
----  toWord32 :: e -> Word32
-
-  -- | Values are scaled to @[0, 18446744073709551615]@ range.
- -- toWord64 :: e -> Word64
-
-  -- | Values are scaled to @[0.0, 1.0]@ range.
- -- toFloat :: e -> Float
-
-  -- | Values are scaled to @[0.0, 1.0]@ range.
-  --toDouble :: e -> Double
-
-  -- | Values are scaled from @[0.0, 1.0]@ range.
-  --fromDouble :: Double -> e
-
-
-
-
 -- | Convert to integral streaching it's value up to a maximum value.
 stretch :: forall a b. (RealFrac a, Floating a, Integral b, Bounded b) => a -> b
 stretch !e = round (fromIntegral (maxBound :: b) * clamp01 e)
@@ -116,7 +86,8 @@ data family Pixel cs e :: *
 
 
 class (Eq cs, Enum cs, Show cs, Bounded cs, Typeable cs,
-      Eq (Pixel cs e), VU.Unbox (Components cs e), Elevator e)
+      Eq (Pixel cs e), -- VU.Unbox (Components cs e),
+      Num e, Typeable e)
       => ColorSpace cs e where
 
   type Components cs e
@@ -164,7 +135,7 @@ class (Typeable arr, ColorSpace cs e, SuperClass arr cs e) =>
   --
   dims :: Image arr cs e -> (Int, Int)
 
-class (VG.Vector (Vector arr) (Pixel cs e),
+class (-- VG.Vector (Vector arr) (Pixel cs e),
        MArray (Manifest arr) cs e, BaseArray arr cs e) => Array arr cs e where
 
   type Manifest arr :: *
@@ -231,7 +202,7 @@ class BaseArray arr cs e => MArray arr cs e  where
   unsafeIndex :: Image arr cs e -> (Int, Int) -> Pixel cs e
 
   -- | Make sure that an image is fully evaluated.
-  deepSeqImage :: Image arr cs e -> a -> a
+  -- deepSeqImage :: Image arr cs e -> a -> a
 
 
 -- | Approach to be used near the borders during various transformations.
@@ -369,9 +340,11 @@ instance (Fractional (Pixel cs e), Array arr cs e) =>
   {-# INLINE fromRational #-}
 
 
+{-
 instance MArray arr cs e => NFData (Image arr cs e) where
   rnf img = img `deepSeqImage` ()
   {-# INLINE rnf #-}
+  -}
 
 
 instance BaseArray arr cs e =>
