@@ -3,6 +3,9 @@
 --- citation: Haskell Graphics.HIP version 1.5.3 library 
 --- last modified: 12/04/2018
 
+{-# LANGUAGE FlexibleInstances, ViewPatterns, UndecidableInstances, BangPatterns,
+      UndecidableSuperClasses, MultiParamTypeClasses, RankNTypes #-}
+
 
 module GAUSSIAN where
 import Clash.Prelude
@@ -90,7 +93,7 @@ class (Eq cs, Enum cs, Show cs, Bounded cs, Typeable cs,
       Num e, Typeable e)
       => ColorSpace cs e where
 
-  type Components cs e
+  -- type Components cs e
 
 
   -- | Construt a Pixel by replicating the same value across all of the components.
@@ -135,8 +138,7 @@ class (Typeable arr, ColorSpace cs e, SuperClass arr cs e) =>
   --
   dims :: Image arr cs e -> (Int, Int)
 
-class (-- VG.Vector (Vector arr) (Pixel cs e),
-       MArray (Manifest arr) cs e, BaseArray arr cs e) => Array arr cs e where
+class (MArray (Manifest arr) cs e, BaseArray arr cs e) => Array arr cs e where
 
   type Manifest arr :: *
 
@@ -280,17 +282,12 @@ handleBorderIndex ~border !(m, n) getPx !(i, j) =
 {-# INLINE handleBorderIndex #-}
 
 
-
-
-
 -- | Image indexing function that uses a special border resolutions strategy for
 -- out of bounds pixels.
 borderIndex :: MArray arr cs e =>
                Border (Pixel cs e) -> Image arr cs e -> (Int, Int) -> Pixel cs e
 borderIndex ~atBorder !img = handleBorderIndex atBorder (dims img) (unsafeIndex img)
 {-# INLINE borderIndex #-}
-
-
 
 instance ColorSpace cs e => Num (Pixel cs e) where
   (+)         = liftPx2 (+)
@@ -306,16 +303,15 @@ instance ColorSpace cs e => Num (Pixel cs e) where
   fromInteger = promote . fromInteger
   {-# INLINE fromInteger #-}
 
+-- instance ColorSpace cs e => Num  (cs (Vec 256 (Signed 8)))
 
 instance (ColorSpace cs e, Fractional e) => Fractional (Pixel cs e) where
-  (/)          = liftPx2 (/)
+  (/)          = liftPx2 (/) 
   {-# INLINE (/) #-}
   recip        = liftPx recip
   {-# INLINE recip #-}
   fromRational = promote . fromRational
   {-# INLINE fromRational #-}
-
-
 
 
 instance Array arr cs e => Num (Image arr cs e) where
@@ -350,7 +346,29 @@ instance BaseArray arr cs e =>
     showsTypeRep (typeRep (Proxy :: Proxy e)) "): " Prelude.++
      show m Prelude.++ "x" Prelude.++ show n Prelude.++ ">"
 
-{------------------------------------------------------GUASSIAN FUNCTION-----------------------------------------------------------}
+{------------------------------------------------------INSTANCES-------------------------------------------------------------------}
+
+data RGB = Red | Green | Blue
+ deriving (Eq,Enum,Show,Bounded)
+
+data instance Pixel RGB (Unsigned 8) = PixelRGB (Unsigned 8) (Unsigned 8) (Unsigned 8)
+  deriving Eq
+
+instance ColorSpace RGB (Unsigned 8) where
+  promote x = PixelRGB x x x
+
+  liftPx f (PixelRGB r g b) = PixelRGB (f r) (f g) (f b)
+
+  liftPx2 f (PixelRGB r1 g1 b1) (PixelRGB r2 g2 b2) = PixelRGB (f r1 r2) (f g1 g2) (f b1 b2)
+
+  foldrPx f z (PixelRGB r g b) = f r (f g (f b z))
+  foldlPx f z (PixelRGB r g b) = f (f (f z r) g) b
+
+instance KnownNat i => BaseArray (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) where
+
+  type SuperClass (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) = ()
+
+{------------------------------------------------------GAUSSIAN FUNCTION-----------------------------------------------------------}
 
 -- | Filter that can be applied to an image using `applyFilter`.
 --
