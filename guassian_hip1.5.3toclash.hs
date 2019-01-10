@@ -370,7 +370,7 @@ instance KnownNat i => BaseArray (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 
 
 
 instance BaseArray (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) => MArray (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) where 
-
+  --unsafeIndex img (x,y) = 
 
 
 {------------------------------------------------------GAUSSIAN FUNCTION-----------------------------------------------------------}
