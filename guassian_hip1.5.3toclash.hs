@@ -366,7 +366,12 @@ instance ColorSpace RGB (Unsigned 8) where
 
 instance KnownNat i => BaseArray (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) where
 
-  type SuperClass (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) = ()
+  type SuperClass (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) = () --apply constraints as needed
+
+
+instance BaseArray (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) => MArray (Vec i (Pixel RGB (Unsigned 8))) RGB (Unsigned 8) where 
+
+
 
 {------------------------------------------------------GAUSSIAN FUNCTION-----------------------------------------------------------}
 
